@@ -30,6 +30,9 @@ class Vector2 {
     scale(scalar) {
         return new Vector2(this.x * scalar, this.y * scalar);
     }
+    cb(xFunc, yFunc) {
+        return new Vector2(xFunc(this.x), yFunc(this.y));
+    }
     array() {
         return [this.x, this.y];
     }
@@ -49,7 +52,7 @@ class Rect {
         return `[${this.position.toString()}, ${this.size.toString()}]`;
     }
 }
-class Renderer {
+class Engine {
     get width() {
         return this.canvas.width;
     }
@@ -77,11 +80,9 @@ class Renderer {
         this.canvas.addEventListener("click", (e) => {
             const clientPosition = new Vector2(e.clientX, e.clientY);
             const canvasPosition = canvas.getBoundingClientRect();
-            console.log(`clientPosition=${clientPosition.toString()}`);
-            console.log(`canvasPosition=[${canvasPosition.x}, ${canvasPosition.y}]`);
             const screenPosition = clientPosition.sub(new Vector2(canvasPosition.x, canvasPosition.y));
-            console.log(screenPosition.toString());
-            console.log(this.toCamera(screenPosition).toString());
+            const gridPosition = this.toCamera(screenPosition).div(new Vector2(64, 64)).cb(Math.floor, Math.floor);
+            console.log(`clicked tile ${gridPosition.toString()}`);
         });
     }
     resize(width, height) {
@@ -93,10 +94,10 @@ class Renderer {
         this.ctx.fillRect(0, 0, this.width, this.height);
     }
     toScreen(p) {
-        return p.add(this.camera.position).add(this.camera.size.scale(0.5));
+        return p.sub(this.camera.position).add(this.camera.size.scale(0.5));
     }
     toCamera(p) {
-        return p.sub(this.camera.position).sub(this.camera.size.scale(0.5));
+        return p.add(this.camera.position).sub(this.camera.size.scale(0.5));
     }
     drawText(text, position, size, color) {
         this.ctx.textAlign = "left";
@@ -138,20 +139,20 @@ class Renderer {
         const grid = new Vector2(Math.ceil(_g.x), Math.ceil(_g.y));
         const grid_offset = grid.scale(tileSize).sub(this.camera.size).scale(0.5);
         for (let y = 0; y < grid.y + 1; ++y) {
-            const offset = y * tileSize + (this.camera.position.y % tileSize) - grid_offset.y;
+            const offset = y * tileSize + (-this.camera.position.y % tileSize) - grid_offset.y;
             this._drawLine(new Vector2(0, offset), new Vector2(grid.x * tileSize, offset), "#000000");
         }
         for (let x = 0; x < grid.x + 1; ++x) {
-            const offset = x * tileSize + (this.camera.position.x % tileSize) - grid_offset.x;
+            const offset = x * tileSize + (-this.camera.position.x % tileSize) - grid_offset.x;
             this._drawLine(new Vector2(offset, 0), new Vector2(offset, grid.y * tileSize), "#000000");
         }
     }
 }
-function render(renderer) {
-    renderer.clear("#181818");
-    renderer.drawGrid(64);
-    renderer.drawText(`camera: ${renderer.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
-    // renderer.drawCircle(new Vector2(0, 0), 16, "#FF00FF");
+function render(e) {
+    e.clear("#181818");
+    e.drawGrid(64);
+    e.drawText(`camera: ${e.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
+    e.drawCircle(new Vector2(0, 0), 16, "#FF00FF");
     // renderer.drawCircle(new Vector2(64, 0), 16, "#FF00FF");
     // renderer.drawCircle(new Vector2(0, 64), 16, "#FF00FF");
     // renderer.drawCircle(new Vector2(64, 64), 16, "#FF00FF");
@@ -160,30 +161,18 @@ function render(renderer) {
     const factor = 96;
     const width = 16 * factor;
     const height = 9 * factor;
-    const renderer = new Renderer(width, height);
+    const engine = new Engine(width, height);
     const camera_speed = 8;
     document.addEventListener("keydown", (e) => {
-        // if (!e.repeat) {
-        if (true) {
-            switch (e.code) {
-                case "KeyW":
-                    renderer.camera.position.y -= camera_speed;
-                    render(renderer);
-                    break;
-                case "KeyS":
-                    renderer.camera.position.y += camera_speed;
-                    render(renderer);
-                    break;
-                case "KeyA":
-                    renderer.camera.position.x -= camera_speed;
-                    render(renderer);
-                    break;
-                case "KeyD":
-                    renderer.camera.position.x += camera_speed;
-                    render(renderer);
-                    break;
-            }
-        }
+        if (e.code == "KeyW")
+            engine.camera.position.y -= camera_speed;
+        if (e.code == "KeyS")
+            engine.camera.position.y += camera_speed;
+        if (e.code == "KeyA")
+            engine.camera.position.x -= camera_speed;
+        if (e.code == "KeyD")
+            engine.camera.position.x += camera_speed;
+        render(engine);
     });
-    render(renderer);
+    render(engine);
 })();
