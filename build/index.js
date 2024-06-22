@@ -41,15 +41,37 @@ class Vector2 {
     }
 }
 class Rect {
-    constructor(position, size) {
-        this.position = position;
-        this.size = size;
+    get size() {
+        return this.end.sub(this.start);
+    }
+    get half() {
+        return this.size.scale(0.5);
+    }
+    get center() {
+        return this.start.add(this.half);
+    }
+    set center(value) {
+        const delta = this.center.sub(value);
+        this.start = this.start.add(delta);
+        this.end = this.end.add(delta);
+    }
+    constructor(start, end) {
+        this.start = start;
+        this.end = end;
+    }
+    static zero() {
+        return new Rect(Vector2.zero(), Vector2.zero());
+    }
+    translate(delta) {
+        const rect = new Rect(this.start, this.end);
+        rect.center = rect.center.sub(delta);
+        return rect;
     }
     array() {
-        return [...this.position.array(), ...this.size.array()];
+        return [...this.start.array(), ...this.end.array()];
     }
     toString() {
-        return `[${this.position.toString()}, ${this.size.toString()}]`;
+        return `[${this.start.toString()}, ${this.end.toString()}] computed: [center: ${this.center.toString()}, size: ${this.size.toString()}]`;
     }
 }
 class Engine {
@@ -65,7 +87,7 @@ class Engine {
     set height(value) {
         this.canvas.height = value;
     }
-    constructor(width, height) {
+    constructor(width, height, tileSize) {
         const canvas = document.querySelector("#canvas");
         if (canvas === null)
             throw new Error("Canvas #canvas not found.");
@@ -76,14 +98,37 @@ class Engine {
         this.ctx = ctx;
         this.resize(width, height);
         this.clear("#181818");
+        this.tileSize = tileSize;
         this.camera = new Rect(Vector2.zero(), new Vector2(width, height));
-        this.canvas.addEventListener("click", (e) => {
-            const clientPosition = new Vector2(e.clientX, e.clientY);
-            const canvasPosition = canvas.getBoundingClientRect();
-            const screenPosition = clientPosition.sub(new Vector2(canvasPosition.x, canvasPosition.y));
-            const gridPosition = this.toCamera(screenPosition).div(new Vector2(64, 64)).cb(Math.floor, Math.floor);
-            console.log(`clicked tile ${gridPosition.toString()}`);
-        });
+        this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    }
+    _clientToGrid(x, y) {
+        const clientPosition = new Vector2(x, y);
+        const canvasPosition = this.canvas.getBoundingClientRect();
+        const screenPosition = clientPosition.sub(new Vector2(canvasPosition.x, canvasPosition.y));
+        const gridPosition = this.toCamera(screenPosition).div(new Vector2(this.tileSize, this.tileSize)).cb(Math.floor, Math.floor);
+        return gridPosition;
+    }
+    setEventCallback(name, cb) {
+        switch (name) {
+            case "grid_clicked":
+                this.canvas.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    cb(e.button, this._clientToGrid(e.clientX, e.clientY));
+                });
+                break;
+            case "grid_down":
+                this.canvas.addEventListener("mousedown", (e) => {
+                    // e.preventDefault();
+                    cb(e.button, this._clientToGrid(e.clientX, e.clientY));
+                });
+                break;
+            case "grid_up":
+                this.canvas.addEventListener("mouseup", (e) => {
+                    // e.preventDefault();
+                    cb(e.button, this._clientToGrid(e.clientX, e.clientY));
+                });
+        }
     }
     resize(width, height) {
         this.width = width;
@@ -94,10 +139,10 @@ class Engine {
         this.ctx.fillRect(0, 0, this.width, this.height);
     }
     toScreen(p) {
-        return p.sub(this.camera.position).add(this.camera.size.scale(0.5));
+        return p.sub(this.camera.center).add(this.camera.size.scale(0.5));
     }
     toCamera(p) {
-        return p.add(this.camera.position).sub(this.camera.size.scale(0.5));
+        return p.add(this.camera.center).sub(this.camera.size.scale(0.5));
     }
     drawText(text, position, size, color) {
         this.ctx.textAlign = "left";
@@ -134,45 +179,219 @@ class Engine {
         this.ctx.fillRect(...position.array(), ...size.array());
         this.ctx.fill();
     }
-    drawGrid(tileSize) {
-        const _g = this.camera.size.div(new Vector2(tileSize, tileSize));
+    drawGrid() {
+        const _g = this.camera.size.div(new Vector2(this.tileSize, this.tileSize));
         const grid = new Vector2(Math.ceil(_g.x), Math.ceil(_g.y));
-        const grid_offset = grid.scale(tileSize).sub(this.camera.size).scale(0.5);
+        const grid_offset = grid.scale(this.tileSize).sub(this.camera.size).scale(0.5);
         for (let y = 0; y < grid.y + 1; ++y) {
-            const offset = y * tileSize + (-this.camera.position.y % tileSize) - grid_offset.y;
-            this._drawLine(new Vector2(0, offset), new Vector2(grid.x * tileSize, offset), "#000000");
+            const offset = y * this.tileSize + (-this.camera.center.y % this.tileSize) - grid_offset.y;
+            this._drawLine(new Vector2(0, offset), new Vector2(grid.x * this.tileSize, offset), "#000000");
         }
         for (let x = 0; x < grid.x + 1; ++x) {
-            const offset = x * tileSize + (-this.camera.position.x % tileSize) - grid_offset.x;
-            this._drawLine(new Vector2(offset, 0), new Vector2(offset, grid.y * tileSize), "#000000");
+            const offset = x * this.tileSize + (-this.camera.center.x % this.tileSize) - grid_offset.x;
+            this._drawLine(new Vector2(offset, 0), new Vector2(offset, grid.y * this.tileSize), "#000000");
         }
     }
 }
-function render(e) {
+class VectorMap {
+    constructor() {
+        this.vectors = [];
+        this.strings = [];
+    }
+    set(key, value) {
+        this.delete(key);
+        this.vectors.push(key);
+        this.strings.push(value);
+    }
+    get(key) {
+        for (let v in this.vectors) {
+            if (this.vectors[v].x === key.x && this.vectors[v].y === key.y) {
+                return this.strings[v];
+            }
+        }
+    }
+    delete(key) {
+        let found = -1;
+        for (let i = 0; i < this.vectors.length; ++i) {
+            if (this.vectors[i].x === key.x && this.vectors[i].y === key.y) {
+                found = i;
+            }
+        }
+        if (found != -1) {
+            this.vectors.splice(found, 1);
+            this.strings.splice(found, 1);
+            return true;
+        }
+        return false;
+    }
+    *entries() {
+        for (let i = 0; i < this.vectors.length; ++i) {
+            yield [this.vectors[i], this.strings[i]];
+        }
+    }
+}
+function getColor(app, index) {
+    const color = app.palette.childNodes[index].childNodes[1];
+    if (color instanceof HTMLInputElement && color.type === "color") {
+        return color.value;
+    }
+}
+function getText(app, index) {
+    const text = app.palette.childNodes[index].childNodes[0];
+    if (text instanceof HTMLInputElement && text.type === "text") {
+        return text.value;
+    }
+}
+function render(e, app) {
     e.clear("#181818");
-    e.drawGrid(64);
+    e.drawGrid();
+    for (let [position, index] of app.world.entries()) {
+        const color = getColor(app, index);
+        if (!color)
+            continue;
+        e.drawRect(position.scale(e.tileSize), new Vector2(e.tileSize, e.tileSize), color);
+    }
     e.drawText(`camera: ${e.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
-    e.drawCircle(new Vector2(0, 0), 16, "#FF00FF");
-    // renderer.drawCircle(new Vector2(64, 0), 16, "#FF00FF");
-    // renderer.drawCircle(new Vector2(0, 64), 16, "#FF00FF");
-    // renderer.drawCircle(new Vector2(64, 64), 16, "#FF00FF");
+}
+function setActivePaletteItem(app, paletteIdx) {
+    app.currentPaletteIdx = Number(paletteIdx);
+}
+function computeWorldRect(app) {
+    let worldRect = undefined;
+    for (let [pos, _] of app.world.entries()) {
+        if (!worldRect) {
+            worldRect = new Rect(pos, pos);
+        }
+        else {
+            if (pos.x < worldRect.start.x)
+                worldRect.start = new Vector2(pos.x, worldRect.start.y);
+            if (pos.x > worldRect.end.x)
+                worldRect.end = new Vector2(pos.x, worldRect.end.y);
+            if (pos.y < worldRect.start.y)
+                worldRect.start = new Vector2(worldRect.start.x, pos.y);
+            if (pos.y > worldRect.end.y)
+                worldRect.end = new Vector2(worldRect.end.x, pos.y);
+        }
+    }
+    if (!worldRect)
+        return undefined;
+    worldRect.end = worldRect.end.add(Vector2.one());
+    return worldRect;
 }
 (() => {
     const factor = 96;
     const width = 16 * factor;
     const height = 9 * factor;
-    const engine = new Engine(width, height);
+    const tileSize = 64;
+    const engine = new Engine(width, height, tileSize);
     const camera_speed = 8;
-    document.addEventListener("keydown", (e) => {
-        if (e.code == "KeyW")
-            engine.camera.position.y -= camera_speed;
-        if (e.code == "KeyS")
-            engine.camera.position.y += camera_speed;
-        if (e.code == "KeyA")
-            engine.camera.position.x -= camera_speed;
-        if (e.code == "KeyD")
-            engine.camera.position.x += camera_speed;
-        render(engine);
+    const addBtn = document.querySelector("#add");
+    const exportBtn = document.querySelector("#export");
+    const palette = document.querySelector("#palette");
+    const filename = document.querySelector("#filename");
+    if (!addBtn || !palette || !exportBtn || !filename)
+        throw new Error("no toolbar found");
+    let paletteItemIdx = 0;
+    const app = {
+        world: new VectorMap(),
+        palette: palette,
+        currentPaletteIdx: -1,
+    };
+    exportBtn.addEventListener("click", (e) => {
+        let worldRect = computeWorldRect(app);
+        if (!worldRect)
+            throw new Error("Couldn't compute world data");
+        const worldRectDelta = worldRect.start.scale(-1);
+        let output = "";
+        for (let y = 0; y < worldRect.size.y; ++y) {
+            for (let x = 0; x < worldRect.size.x; ++x) {
+                const position = worldRect.start.add(new Vector2(x, y));
+                const tile = app.world.get(position);
+                if (tile !== undefined) {
+                    const character = getText(app, tile);
+                    output += character;
+                }
+                else {
+                    output += " ";
+                }
+            }
+            output += "\n";
+        }
+        console.log(output);
+        // const a = document.createElement("a");
+        // a.href = URL.createObjectURL(new File([output], "hello.txt", { type: "octet/stream" }));
+        // a.setAttribute("download", filename.value || "export.txt");
+        // document.body.appendChild(a);
+        // a.click();
+        // document.body.removeChild(a);
     });
-    render(engine);
+    addBtn.addEventListener("click", (e) => {
+        // PALETTE ITEM
+        const paletteItem = document.createElement("div");
+        paletteItem.className = "flex h-full";
+        // TEXT INPUT
+        const text = document.createElement("input");
+        text.type = "text";
+        text.placeholder = "#";
+        text.className = "w-4";
+        text.maxLength = 1;
+        // RADIO INPUT
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "palette";
+        radio.value = `${paletteItemIdx}`;
+        radio.className = "w-8 h-full";
+        radio.addEventListener("change", (e) => {
+            setActivePaletteItem(app, radio.value);
+        });
+        // COLOR INPUT
+        const color = document.createElement("input");
+        color.type = "color";
+        color.className = "h-full";
+        color.addEventListener("change", (e) => {
+            radio.click();
+            render(engine, app);
+        });
+        // TREE
+        paletteItem.appendChild(text);
+        paletteItem.appendChild(color);
+        paletteItem.appendChild(radio);
+        palette.appendChild(paletteItem);
+        if (palette.childElementCount == 1) {
+            text.value = "#";
+            radio.click();
+        }
+        paletteItemIdx += 1;
+    });
+    window.addEventListener("keydown", (e) => {
+        if (e.code == "KeyW")
+            engine.camera.center = engine.camera.center.add(new Vector2(0, -camera_speed));
+        if (e.code == "KeyA")
+            engine.camera.center = engine.camera.center.add(new Vector2(-camera_speed, 0));
+        if (e.code == "KeyD")
+            engine.camera.center = engine.camera.center.add(new Vector2(+camera_speed, 0));
+        if (e.code == "KeyS")
+            engine.camera.center = engine.camera.center.add(new Vector2(0, +camera_speed));
+        render(engine, app);
+    });
+    engine.setEventCallback("grid_down", (button, position) => {
+        switch (button) {
+            case 0: // left click
+                if (app.currentPaletteIdx != -1) {
+                    console.log(`click at ${position.toString()}`);
+                    app.world.set(position, app.currentPaletteIdx);
+                }
+                break;
+            case 1: // middle click
+            case 2: // right click
+                if (!app.world.delete(position)) {
+                    console.log(`Nothing to delete ! ${position.toString()}`);
+                }
+                break;
+        }
+        render(engine, app);
+    });
+    addBtn.click();
+    render(engine, app);
 })();
+//# sourceMappingURL=index.js.map

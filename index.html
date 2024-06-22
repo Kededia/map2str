@@ -3,21 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <style>
-      body {
-        background-color: black;
-      }
-      #canvas {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-      }
-    </style>
+     <script src="https://cdn.tailwindcss.com"></script>
     <title>map2str</title>
   </head>
-  <body>
-    <canvas id="canvas"></canvas>
+  <body class="bg-black overflow-hidden">
+    <div class="flex h-12">
+      <button id="add" class="px-4 py-0 rounded bg-lime-400 font-bold">add</button>
+      <div id="palette" class="grow flex items-center justify-center gap-2 px-2"></div>
+      <input id="filename" type="text" placeholder="file_name.txt" class="px-2">
+      <button id="export" class="px-4 py-0 rounded bg-fuchsia-400 font-bold">export</button>
+    </div>
+    <canvas id="canvas" class="w-full f-full "></canvas>
     <script src="./build/index.js"></script>
   </body>
 </html>
