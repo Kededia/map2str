@@ -301,7 +301,6 @@ function computeWorldRect(app) {
         let worldRect = computeWorldRect(app);
         if (!worldRect)
             throw new Error("Couldn't compute world data");
-        const worldRectDelta = worldRect.start.scale(-1);
         let output = "";
         for (let y = 0; y < worldRect.size.y; ++y) {
             for (let x = 0; x < worldRect.size.x; ++x) {
