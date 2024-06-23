@@ -380,13 +380,13 @@ interface App {
             }
             output += "\n";
         }
-        console.log(output);
-        // const a = document.createElement("a");
-        // a.href = URL.createObjectURL(new File([output], "hello.txt", { type: "octet/stream" }));
-        // a.setAttribute("download", filename.value || "export.txt");
-        // document.body.appendChild(a);
-        // a.click();
-        // document.body.removeChild(a);
+        // console.log(output);
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new File([output], "hello.txt", { type: "octet/stream" }));
+        a.setAttribute("download", filename.value || "export.txt");
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     });
 
     addBtn.addEventListener("click", (e) => {
