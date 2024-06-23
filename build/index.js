@@ -251,7 +251,7 @@ function render(e, app) {
             continue;
         e.drawRect(position.scale(e.tileSize), new Vector2(e.tileSize, e.tileSize), color);
     }
-    e.drawText(`camera: ${e.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
+    // e.drawText(`camera: ${e.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
 }
 function setActivePaletteItem(app, paletteIdx) {
     app.currentPaletteIdx = Number(paletteIdx);
