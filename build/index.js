@@ -408,7 +408,7 @@ function computeWorldRect(app) {
         const text = document.createElement("input");
         text.type = "text";
         text.placeholder = "#";
-        text.className = "w-4";
+        text.className = "w-6 text-center";
         text.maxLength = 1;
         // RADIO INPUT
         const radio = document.createElement("input");
