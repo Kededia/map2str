@@ -226,7 +226,7 @@ class Engine {
         });
         this.canvas.addEventListener("wheel", (e) => {
             e.preventDefault();
-            this.tileSize += Math.sign(e.deltaY);
+            this.tileSize -= Math.sign(e.deltaY);
             this.update();
         });
     }
