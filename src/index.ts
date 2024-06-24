@@ -40,7 +40,16 @@ class Vector2 {
         return new Vector2(this.x * scalar, this.y * scalar);
     }
 
-    cb(xFunc: (x: number) => number, yFunc: (x: number) => number): Vector2 {
+    mod(that: Vector2): Vector2 {
+        if (that.x === 0 || that.y === 0) return this;
+        return new Vector2(this.x % that.x, this.y % that.y);
+    }
+
+    cb1(xFunc: (x: number) => number): Vector2 {
+        return new Vector2(xFunc(this.x), xFunc(this.y));
+    }
+
+    cb2(xFunc: (x: number) => number, yFunc: (x: number) => number): Vector2 {
         return new Vector2(xFunc(this.x), yFunc(this.y));
     }
 
@@ -173,6 +182,7 @@ class Engine {
     renderCb: () => void = () => {};
 
     camera: Rect;
+    zoomLevel: number = 1;
     dragging = false;
     old_mouse_position = Vector2.zero();
 
@@ -214,13 +224,18 @@ class Engine {
                 this.update();
             }
         });
+        this.canvas.addEventListener("wheel", (e) => {
+            e.preventDefault();
+            this.tileSize += Math.sign(e.deltaY);
+            this.update();
+        });
     }
 
     _clientToGrid(x: number, y: number): Vector2 {
         const clientPosition = new Vector2(x, y);
         const canvasPosition = this.canvas.getBoundingClientRect();
         const screenPosition = clientPosition.sub(new Vector2(canvasPosition.x, canvasPosition.y));
-        const gridPosition = this.toCamera(screenPosition).div(new Vector2(this.tileSize, this.tileSize)).cb(Math.floor, Math.floor);
+        const gridPosition = this.toCamera(screenPosition).div(new Vector2(this.tileSize, this.tileSize)).cb1(Math.floor);
         return gridPosition;
     }
 
@@ -308,16 +323,21 @@ class Engine {
     }
 
     drawGrid() {
-        const _g = this.camera.size.div(new Vector2(this.tileSize, this.tileSize));
-        const grid = new Vector2(Math.ceil(_g.x), Math.ceil(_g.y));
-        const grid_offset = grid.scale(this.tileSize).sub(this.camera.size).scale(0.5);
+        const tile = new Vector2(this.tileSize, this.tileSize);
+        const grid = this.camera.size.div(tile).cb1(Math.ceil);
+        // const grid_offset = new Vector2(this.tileSize, this.tileSize).add(
+        //     new Vector2(-this.camera.center.x % this.tileSize, -this.camera.center.y % this.tileSize)
+        // );
+        // const grid_offset = grid.scale(this.tileSize).sub(this.camera.size);
+        const grid_offset = this.camera.size.scale(0.5).mod(tile);
+        console.log(`tile = ${tile}`);
 
         for (let y = 0; y < grid.y + 1; ++y) {
-            const offset = y * this.tileSize + (-this.camera.center.y % this.tileSize) - grid_offset.y;
+            const offset = y * this.tileSize + (-this.camera.center.y % this.tileSize) + grid_offset.y;
             this._drawLine(new Vector2(0, offset), new Vector2(grid.x * this.tileSize, offset), "#000000");
         }
         for (let x = 0; x < grid.x + 1; ++x) {
-            const offset = x * this.tileSize + (-this.camera.center.x % this.tileSize) - grid_offset.x;
+            const offset = x * this.tileSize + (-this.camera.center.x % this.tileSize) + grid_offset.x;
             this._drawLine(new Vector2(offset, 0), new Vector2(offset, grid.y * this.tileSize), "#000000");
         }
     }
@@ -388,8 +408,8 @@ interface App {
     const factor = 96;
     const width = 16 * factor;
     const height = 9 * factor;
-    const tileSize = 64;
-    const camera_speed = 8;
+    const tileSize = 42;
+    const camera_speed = 4;
 
     /*
      ** HTML
