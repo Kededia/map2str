@@ -290,7 +290,7 @@ class Engine {
         this.clear("#181818");
         this.drawGrid();
         this.renderCb();
-        this.drawText(`camera: ${this.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
+        // this.drawText(`camera: ${this.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
     }
 }
 /*
