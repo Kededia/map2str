@@ -1,5 +1,3 @@
-type numberCB = (arg1: number) => number;
-
 class Vector2 {
     x: number;
     y: number;
@@ -42,7 +40,7 @@ class Vector2 {
         return new Vector2(this.x * scalar, this.y * scalar);
     }
 
-    cb(xFunc: numberCB, yFunc: numberCB): Vector2 {
+    cb(xFunc: (x: number) => number, yFunc: (x: number) => number): Vector2 {
         return new Vector2(xFunc(this.x), yFunc(this.y));
     }
 
@@ -98,6 +96,60 @@ class Rect {
     }
 }
 
+class VectorMap<T> {
+    vectors: Array<Vector2>;
+    values: Array<T>;
+
+    constructor() {
+        this.vectors = [];
+        this.values = [];
+    }
+
+    set(key: Vector2, value: T) {
+        this.delete(key);
+        this.vectors.push(key);
+        this.values.push(value);
+    }
+
+    has(key: Vector2): boolean {
+        for (let v in this.vectors) {
+            if (this.vectors[v].x === key.x && this.vectors[v].y === key.y) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    get(key: Vector2): T | undefined {
+        for (let v in this.vectors) {
+            if (this.vectors[v].x === key.x && this.vectors[v].y === key.y) {
+                return this.values[v];
+            }
+        }
+    }
+
+    delete(key: Vector2): boolean {
+        let found = -1;
+        for (let i = 0; i < this.vectors.length; ++i) {
+            if (this.vectors[i].x === key.x && this.vectors[i].y === key.y) {
+                found = i;
+            }
+        }
+        if (found != -1) {
+            this.vectors.splice(found, 1);
+            this.values.splice(found, 1);
+            return true;
+        }
+        return false;
+    }
+
+    *entries(): IterableIterator<[Vector2, T]> {
+        for (let i = 0; i < this.vectors.length; ++i) {
+            yield [this.vectors[i], this.values[i]];
+        }
+    }
+}
+
 type EventType = "grid_clicked" | "grid_down" | "grid_up";
 
 class Engine {
@@ -118,7 +170,11 @@ class Engine {
     }
 
     tileSize: number;
+    renderCb: () => void = () => {};
+
     camera: Rect;
+    dragging = false;
+    old_mouse_position = Vector2.zero();
 
     constructor(width: number, height: number, tileSize: number) {
         const canvas: HTMLCanvasElement | null = document.querySelector("#canvas");
@@ -137,6 +193,27 @@ class Engine {
         this.camera = new Rect(Vector2.zero(), new Vector2(width, height));
 
         this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+        this.canvas.addEventListener("mousedown", (e) => {
+            if (e.button == 1) {
+                this.dragging = true;
+            }
+        });
+        this.canvas.addEventListener("mouseup", (e) => {
+            if (e.button == 1) {
+                this.dragging = false;
+                this.old_mouse_position = Vector2.zero();
+            }
+        });
+        this.canvas.addEventListener("mousemove", (e) => {
+            if (this.dragging) {
+                const mouse_position = new Vector2(e.clientX, e.clientY);
+                if (this.old_mouse_position.x !== 0 || this.old_mouse_position.y !== 0) {
+                    this.camera.center = this.camera.center.add(mouse_position.sub(this.old_mouse_position));
+                }
+                this.old_mouse_position = mouse_position;
+                this.update();
+            }
+        });
     }
 
     _clientToGrid(x: number, y: number): Vector2 {
@@ -145,6 +222,10 @@ class Engine {
         const screenPosition = clientPosition.sub(new Vector2(canvasPosition.x, canvasPosition.y));
         const gridPosition = this.toCamera(screenPosition).div(new Vector2(this.tileSize, this.tileSize)).cb(Math.floor, Math.floor);
         return gridPosition;
+    }
+
+    setRenderCallback(cb: () => void) {
+        this.renderCb = cb;
     }
 
     setEventCallback(name: EventType, cb: any) {
@@ -240,53 +321,24 @@ class Engine {
             this._drawLine(new Vector2(offset, 0), new Vector2(offset, grid.y * this.tileSize), "#000000");
         }
     }
-}
 
-class VectorMap<T> {
-    vectors: Array<Vector2>;
-    strings: Array<T>;
-
-    constructor() {
-        this.vectors = [];
-        this.strings = [];
+    update() {
+        this.render();
     }
 
-    set(key: Vector2, value: T) {
-        this.delete(key);
-        this.vectors.push(key);
-        this.strings.push(value);
-    }
+    render() {
+        this.clear("#181818");
+        this.drawGrid();
 
-    get(key: Vector2): T | undefined {
-        for (let v in this.vectors) {
-            if (this.vectors[v].x === key.x && this.vectors[v].y === key.y) {
-                return this.strings[v];
-            }
-        }
-    }
+        this.renderCb();
 
-    delete(key: Vector2): boolean {
-        let found = -1;
-        for (let i = 0; i < this.vectors.length; ++i) {
-            if (this.vectors[i].x === key.x && this.vectors[i].y === key.y) {
-                found = i;
-            }
-        }
-        if (found != -1) {
-            this.vectors.splice(found, 1);
-            this.strings.splice(found, 1);
-            return true;
-        }
-        return false;
-    }
-
-    *entries(): IterableIterator<[Vector2, T]> {
-        for (let i = 0; i < this.vectors.length; ++i) {
-            yield [this.vectors[i], this.strings[i]];
-        }
+        this.drawText(`camera: ${this.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
     }
 }
 
+/*
+ **  PALETTE
+ */
 function getColor(app: App, index: number): string | undefined {
     const color = app.palette.childNodes[index].childNodes[1];
     if (color instanceof HTMLInputElement && color.type === "color") {
@@ -301,22 +353,11 @@ function getText(app: App, index: number): string | undefined {
     }
 }
 
-function render(e: Engine, app: App) {
-    e.clear("#181818");
-    e.drawGrid();
-
-    for (let [position, index] of app.world.entries()) {
-        const color = getColor(app, index);
-        if (!color) continue;
-        e.drawRect(position.scale(e.tileSize), new Vector2(e.tileSize, e.tileSize), color);
-    }
-    // e.drawText(`camera: ${e.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
-}
-
 function setActivePaletteItem(app: App, paletteIdx: string) {
     app.currentPaletteIdx = Number(paletteIdx);
 }
 
+// return a Rect that contain all tiles drawn
 function computeWorldRect(app: App): Rect | undefined {
     let worldRect: Rect | undefined = undefined;
     for (let [pos, _] of app.world.entries()) {
@@ -341,13 +382,18 @@ interface App {
 }
 
 (() => {
+    /*
+     ** CONSTANTS
+     */
     const factor = 96;
     const width = 16 * factor;
     const height = 9 * factor;
     const tileSize = 64;
-    const engine = new Engine(width, height, tileSize);
     const camera_speed = 8;
 
+    /*
+     ** HTML
+     */
     const addBtn: HTMLButtonElement | null = document.querySelector("#add");
     const exportBtn: HTMLButtonElement | null = document.querySelector("#export");
     const palette: HTMLDivElement | null = document.querySelector("#palette");
@@ -355,14 +401,29 @@ interface App {
 
     if (!addBtn || !palette || !exportBtn || !filename) throw new Error("no toolbar found");
 
-    let paletteItemIdx = 0;
-
+    /*
+     ** VARS
+     */
     const app: App = {
         world: new VectorMap(),
         palette: palette,
         currentPaletteIdx: -1,
     };
+    let paletteItemIdx = 0;
 
+    const engine = new Engine(width, height, tileSize);
+
+    engine.setRenderCallback(() => {
+        for (let [position, index] of app.world.entries()) {
+            const color = getColor(app, index);
+            if (!color) continue;
+            engine.drawRect(position.scale(engine.tileSize), new Vector2(engine.tileSize, engine.tileSize), color);
+        }
+    });
+
+    /*
+     ** EVENTS
+     */
     exportBtn.addEventListener("click", (e) => {
         let worldRect = computeWorldRect(app);
         if (!worldRect) throw new Error("Couldn't compute world data");
@@ -417,7 +478,7 @@ interface App {
         color.className = "h-full";
         color.addEventListener("change", (e) => {
             radio.click();
-            render(engine, app);
+            engine.update();
         });
 
         // TREE
@@ -438,7 +499,7 @@ interface App {
         if (e.code == "KeyA") engine.camera.center = engine.camera.center.add(new Vector2(-camera_speed, 0));
         if (e.code == "KeyD") engine.camera.center = engine.camera.center.add(new Vector2(+camera_speed, 0));
         if (e.code == "KeyS") engine.camera.center = engine.camera.center.add(new Vector2(0, +camera_speed));
-        render(engine, app);
+        engine.update();
     });
 
     engine.setEventCallback("grid_down", (button: number, position: Vector2) => {
@@ -450,15 +511,17 @@ interface App {
                 }
                 break;
             case 1: // middle click
-
+                break;
             case 2: // right click
                 if (!app.world.delete(position)) {
                     console.log(`Nothing to delete ! ${position.toString()}`);
                 }
                 break;
         }
-        render(engine, app);
+        engine.update();
     });
+
+    // INITIAL STATE
     addBtn.click();
-    render(engine, app);
+    engine.update();
 })();

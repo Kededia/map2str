@@ -74,6 +74,51 @@ class Rect {
         return `[${this.start.toString()}, ${this.end.toString()}] computed: [center: ${this.center.toString()}, size: ${this.size.toString()}]`;
     }
 }
+class VectorMap {
+    constructor() {
+        this.vectors = [];
+        this.values = [];
+    }
+    set(key, value) {
+        this.delete(key);
+        this.vectors.push(key);
+        this.values.push(value);
+    }
+    has(key) {
+        for (let v in this.vectors) {
+            if (this.vectors[v].x === key.x && this.vectors[v].y === key.y) {
+                return true;
+            }
+        }
+        return false;
+    }
+    get(key) {
+        for (let v in this.vectors) {
+            if (this.vectors[v].x === key.x && this.vectors[v].y === key.y) {
+                return this.values[v];
+            }
+        }
+    }
+    delete(key) {
+        let found = -1;
+        for (let i = 0; i < this.vectors.length; ++i) {
+            if (this.vectors[i].x === key.x && this.vectors[i].y === key.y) {
+                found = i;
+            }
+        }
+        if (found != -1) {
+            this.vectors.splice(found, 1);
+            this.values.splice(found, 1);
+            return true;
+        }
+        return false;
+    }
+    *entries() {
+        for (let i = 0; i < this.vectors.length; ++i) {
+            yield [this.vectors[i], this.values[i]];
+        }
+    }
+}
 class Engine {
     get width() {
         return this.canvas.width;
@@ -88,6 +133,9 @@ class Engine {
         this.canvas.height = value;
     }
     constructor(width, height, tileSize) {
+        this.renderCb = () => { };
+        this.dragging = false;
+        this.old_mouse_position = Vector2.zero();
         const canvas = document.querySelector("#canvas");
         if (canvas === null)
             throw new Error("Canvas #canvas not found.");
@@ -101,6 +149,27 @@ class Engine {
         this.tileSize = tileSize;
         this.camera = new Rect(Vector2.zero(), new Vector2(width, height));
         this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+        this.canvas.addEventListener("mousedown", (e) => {
+            if (e.button == 1) {
+                this.dragging = true;
+            }
+        });
+        this.canvas.addEventListener("mouseup", (e) => {
+            if (e.button == 1) {
+                this.dragging = false;
+                this.old_mouse_position = Vector2.zero();
+            }
+        });
+        this.canvas.addEventListener("mousemove", (e) => {
+            if (this.dragging) {
+                const mouse_position = new Vector2(e.clientX, e.clientY);
+                if (this.old_mouse_position.x !== 0 || this.old_mouse_position.y !== 0) {
+                    this.camera.center = this.camera.center.add(mouse_position.sub(this.old_mouse_position));
+                }
+                this.old_mouse_position = mouse_position;
+                this.update();
+            }
+        });
     }
     _clientToGrid(x, y) {
         const clientPosition = new Vector2(x, y);
@@ -108,6 +177,9 @@ class Engine {
         const screenPosition = clientPosition.sub(new Vector2(canvasPosition.x, canvasPosition.y));
         const gridPosition = this.toCamera(screenPosition).div(new Vector2(this.tileSize, this.tileSize)).cb(Math.floor, Math.floor);
         return gridPosition;
+    }
+    setRenderCallback(cb) {
+        this.renderCb = cb;
     }
     setEventCallback(name, cb) {
         switch (name) {
@@ -192,44 +264,19 @@ class Engine {
             this._drawLine(new Vector2(offset, 0), new Vector2(offset, grid.y * this.tileSize), "#000000");
         }
     }
-}
-class VectorMap {
-    constructor() {
-        this.vectors = [];
-        this.strings = [];
+    update() {
+        this.render();
     }
-    set(key, value) {
-        this.delete(key);
-        this.vectors.push(key);
-        this.strings.push(value);
-    }
-    get(key) {
-        for (let v in this.vectors) {
-            if (this.vectors[v].x === key.x && this.vectors[v].y === key.y) {
-                return this.strings[v];
-            }
-        }
-    }
-    delete(key) {
-        let found = -1;
-        for (let i = 0; i < this.vectors.length; ++i) {
-            if (this.vectors[i].x === key.x && this.vectors[i].y === key.y) {
-                found = i;
-            }
-        }
-        if (found != -1) {
-            this.vectors.splice(found, 1);
-            this.strings.splice(found, 1);
-            return true;
-        }
-        return false;
-    }
-    *entries() {
-        for (let i = 0; i < this.vectors.length; ++i) {
-            yield [this.vectors[i], this.strings[i]];
-        }
+    render() {
+        this.clear("#181818");
+        this.drawGrid();
+        this.renderCb();
+        this.drawText(`camera: ${this.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
     }
 }
+/*
+ **  PALETTE
+ */
 function getColor(app, index) {
     const color = app.palette.childNodes[index].childNodes[1];
     if (color instanceof HTMLInputElement && color.type === "color") {
@@ -242,20 +289,10 @@ function getText(app, index) {
         return text.value;
     }
 }
-function render(e, app) {
-    e.clear("#181818");
-    e.drawGrid();
-    for (let [position, index] of app.world.entries()) {
-        const color = getColor(app, index);
-        if (!color)
-            continue;
-        e.drawRect(position.scale(e.tileSize), new Vector2(e.tileSize, e.tileSize), color);
-    }
-    // e.drawText(`camera: ${e.camera.toString()}`, new Vector2(10, 10), 14, "#FFFFFF");
-}
 function setActivePaletteItem(app, paletteIdx) {
     app.currentPaletteIdx = Number(paletteIdx);
 }
+// return a Rect that contain all tiles drawn
 function computeWorldRect(app) {
     let worldRect = undefined;
     for (let [pos, _] of app.world.entries()) {
@@ -279,24 +316,44 @@ function computeWorldRect(app) {
     return worldRect;
 }
 (() => {
+    /*
+     ** CONSTANTS
+     */
     const factor = 96;
     const width = 16 * factor;
     const height = 9 * factor;
     const tileSize = 64;
-    const engine = new Engine(width, height, tileSize);
     const camera_speed = 8;
+    /*
+     ** HTML
+     */
     const addBtn = document.querySelector("#add");
     const exportBtn = document.querySelector("#export");
     const palette = document.querySelector("#palette");
     const filename = document.querySelector("#filename");
     if (!addBtn || !palette || !exportBtn || !filename)
         throw new Error("no toolbar found");
-    let paletteItemIdx = 0;
+    /*
+     ** VARS
+     */
     const app = {
         world: new VectorMap(),
         palette: palette,
         currentPaletteIdx: -1,
     };
+    let paletteItemIdx = 0;
+    const engine = new Engine(width, height, tileSize);
+    engine.setRenderCallback(() => {
+        for (let [position, index] of app.world.entries()) {
+            const color = getColor(app, index);
+            if (!color)
+                continue;
+            engine.drawRect(position.scale(engine.tileSize), new Vector2(engine.tileSize, engine.tileSize), color);
+        }
+    });
+    /*
+     ** EVENTS
+     */
     exportBtn.addEventListener("click", (e) => {
         let worldRect = computeWorldRect(app);
         if (!worldRect)
@@ -349,7 +406,7 @@ function computeWorldRect(app) {
         color.className = "h-full";
         color.addEventListener("change", (e) => {
             radio.click();
-            render(engine, app);
+            engine.update();
         });
         // TREE
         paletteItem.appendChild(text);
@@ -371,7 +428,7 @@ function computeWorldRect(app) {
             engine.camera.center = engine.camera.center.add(new Vector2(+camera_speed, 0));
         if (e.code == "KeyS")
             engine.camera.center = engine.camera.center.add(new Vector2(0, +camera_speed));
-        render(engine, app);
+        engine.update();
     });
     engine.setEventCallback("grid_down", (button, position) => {
         switch (button) {
@@ -382,15 +439,17 @@ function computeWorldRect(app) {
                 }
                 break;
             case 1: // middle click
+                break;
             case 2: // right click
                 if (!app.world.delete(position)) {
                     console.log(`Nothing to delete ! ${position.toString()}`);
                 }
                 break;
         }
-        render(engine, app);
+        engine.update();
     });
+    // INITIAL STATE
     addBtn.click();
-    render(engine, app);
+    engine.update();
 })();
 //# sourceMappingURL=index.js.map
