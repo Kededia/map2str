@@ -1,4 +1,4 @@
-# map2str
+# tilemap2ascii
 
 ## description
 A simple 2d map creator that export to ascii characters of your choice.

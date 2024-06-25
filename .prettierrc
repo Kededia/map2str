@@ -19,6 +19,6 @@
   "useTabs": false,
   "embeddedLanguageFormatting": "auto",
   "vueIndentScriptAndStyle": false,
-  "filepath": "c:\\Users\\Fabien\\dev\\Archive\\map2str\\src\\index.ts",
+  "filepath": "c:\\Users\\Fabien\\dev\\Archive\\tilemap2ascii\\src\\index.ts",
   "parser": "typescript"
 }
