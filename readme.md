@@ -1,7 +1,7 @@
 # map2str
 
 ## description
-A simple 2d map creator that export to this "kind of" format (you can chose the characters):
+A simple 2d map creator that export to ascii characters of your choice.
 ```plaintext
 #####
 #   #
@@ -13,3 +13,4 @@ A simple 2d map creator that export to this "kind of" format (you can chose the 
 ## todos
 - [ ] camera stay centered on zoom in/out
 - [ ] map import
+- [ ] drag to draw
