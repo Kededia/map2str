@@ -152,6 +152,11 @@ class VectorMap<T> {
         return false;
     }
 
+    clear() {
+        this.vectors = [];
+        this.values = [];
+    }
+
     *entries(): IterableIterator<[Vector2, T]> {
         for (let i = 0; i < this.vectors.length; ++i) {
             yield [this.vectors[i], this.values[i]];
@@ -325,12 +330,7 @@ class Engine {
     drawGrid() {
         const tile = new Vector2(this.tileSize, this.tileSize);
         const grid = this.camera.size.div(tile).cb1(Math.ceil);
-        // const grid_offset = new Vector2(this.tileSize, this.tileSize).add(
-        //     new Vector2(-this.camera.center.x % this.tileSize, -this.camera.center.y % this.tileSize)
-        // );
-        // const grid_offset = grid.scale(this.tileSize).sub(this.camera.size);
         const grid_offset = this.camera.size.scale(0.5).mod(tile);
-        console.log(`tile = ${tile}`);
 
         for (let y = 0; y < grid.y + 1; ++y) {
             const offset = y * this.tileSize + (-this.camera.center.y % this.tileSize) + grid_offset.y;
@@ -359,6 +359,51 @@ class Engine {
 /*
  **  PALETTE
  */
+function createPaletteItem(app: App, palette: HTMLDivElement, character: string = "#", baseColor: string = "#FF00FF") {
+    // PALETTE ITEM
+    const paletteItem = document.createElement("div");
+    paletteItem.className = "flex h-full";
+
+    // TEXT INPUT
+    const text = document.createElement("input");
+    text.type = "text";
+    text.placeholder = "#";
+    text.textContent = character;
+    text.className = "w-6 text-center";
+    text.maxLength = 1;
+
+    // RADIO INPUT
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "palette";
+    radio.value = `${app.paletteItemIdx}`;
+    radio.className = "w-8 h-full";
+    radio.addEventListener("change", (e) => {
+        setActivePaletteItem(app, Number(radio.value));
+    });
+
+    // COLOR INPUT
+    const color = document.createElement("input");
+    color.type = "color";
+    color.className = "h-full";
+    color.value = baseColor;
+    color.addEventListener("change", (e) => {
+        radio.click();
+        engine.update();
+    });
+
+    // TREE
+    paletteItem.appendChild(text);
+    paletteItem.appendChild(color);
+    paletteItem.appendChild(radio);
+
+    app.paletteItemIdx += 1;
+
+    palette.appendChild(paletteItem);
+
+    // auto select new palette item
+    radio.click();
+}
 function getColor(app: App, index: number): string | undefined {
     const color = app.palette.childNodes[index].childNodes[1];
     if (color instanceof HTMLInputElement && color.type === "color") {
@@ -373,8 +418,8 @@ function getText(app: App, index: number): string | undefined {
     }
 }
 
-function setActivePaletteItem(app: App, paletteIdx: string) {
-    app.currentPaletteIdx = Number(paletteIdx);
+function setActivePaletteItem(app: App, paletteIdx: number) {
+    app.currentPaletteIdx = paletteIdx;
 }
 
 // return a Rect that contain all tiles drawn
@@ -399,27 +444,30 @@ interface App {
     world: VectorMap<number>;
     palette: HTMLDivElement;
     currentPaletteIdx: number;
+    paletteItemIdx: number;
 }
 
-(() => {
-    /*
-     ** CONSTANTS
-     */
-    const factor = 96;
-    const width = 16 * factor;
-    const height = 9 * factor;
-    const tileSize = 42;
-    const camera_speed = 4;
+/*
+ ** CONSTANTS
+ */
+const factor = 96;
+const width = 16 * factor;
+const height = 9 * factor;
+const tileSize = 64;
 
+const engine = new Engine(width, height, tileSize);
+
+(() => {
     /*
      ** HTML
      */
     const addBtn: HTMLButtonElement | null = document.querySelector("#add");
+    const importBtn: HTMLButtonElement | null = document.querySelector("#import");
     const exportBtn: HTMLButtonElement | null = document.querySelector("#export");
     const palette: HTMLDivElement | null = document.querySelector("#palette");
     const filename: HTMLInputElement | null = document.querySelector("#filename");
 
-    if (!addBtn || !palette || !exportBtn || !filename) throw new Error("no toolbar found");
+    if (!importBtn || !addBtn || !palette || !exportBtn || !filename) throw new Error("no toolbar found");
 
     /*
      ** VARS
@@ -428,10 +476,8 @@ interface App {
         world: new VectorMap(),
         palette: palette,
         currentPaletteIdx: -1,
+        paletteItemIdx: 0,
     };
-    let paletteItemIdx = 0;
-
-    const engine = new Engine(width, height, tileSize);
 
     engine.setRenderCallback(() => {
         for (let [position, index] of app.world.entries()) {
@@ -444,6 +490,34 @@ interface App {
     /*
      ** EVENTS
      */
+    importBtn.addEventListener("click", (e) => {
+        const inputFile: HTMLInputElement = document.createElement("input");
+        inputFile.type = "file";
+        inputFile.addEventListener("change", async (_) => {
+            if (inputFile.files && inputFile.files.length == 1) {
+                // const palette = [];
+                app.currentPaletteIdx = 0;
+                app.world.clear();
+                // recenter camera
+
+                const text = await inputFile.files[0].text();
+                const rows = text.split("\n");
+                for (let y = 0; y < rows.length; ++y) {
+                    const row = rows[y];
+                    for (let x = 0; x < row.length; ++x) {
+                        const character = row.charAt(x);
+                        if (character !== " ") {
+                            // if not in palette
+                            // // add to palette
+                            // get palette idx for this character
+                            // app.world.set(new Vector2(x, y), paletteIdx);
+                        }
+                    }
+                }
+            }
+        });
+        inputFile.click();
+    });
     exportBtn.addEventListener("click", (e) => {
         let worldRect = computeWorldRect(app);
         if (!worldRect) throw new Error("Couldn't compute world data");
@@ -463,64 +537,14 @@ interface App {
         }
         // console.log(output);
         const a = document.createElement("a");
-        a.href = URL.createObjectURL(new File([output], "hello.txt", { type: "octet/stream" }));
+        a.href = URL.createObjectURL(new File([output], "export.txt", { type: "octet/stream" }));
         a.setAttribute("download", filename.value || "export.txt");
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
     });
 
-    addBtn.addEventListener("click", (e) => {
-        // PALETTE ITEM
-        const paletteItem = document.createElement("div");
-        paletteItem.className = "flex h-full";
-
-        // TEXT INPUT
-        const text = document.createElement("input");
-        text.type = "text";
-        text.placeholder = "#";
-        text.className = "w-6 text-center";
-        text.maxLength = 1;
-
-        // RADIO INPUT
-        const radio = document.createElement("input");
-        radio.type = "radio";
-        radio.name = "palette";
-        radio.value = `${paletteItemIdx}`;
-        radio.className = "w-8 h-full";
-        radio.addEventListener("change", (e) => {
-            setActivePaletteItem(app, radio.value);
-        });
-
-        // COLOR INPUT
-        const color = document.createElement("input");
-        color.type = "color";
-        color.className = "h-full";
-        color.addEventListener("change", (e) => {
-            radio.click();
-            engine.update();
-        });
-
-        // TREE
-        paletteItem.appendChild(text);
-        paletteItem.appendChild(color);
-        paletteItem.appendChild(radio);
-
-        palette.appendChild(paletteItem);
-        if (palette.childElementCount == 1) {
-            text.value = "#";
-            radio.click();
-        }
-        paletteItemIdx += 1;
-    });
-
-    window.addEventListener("keydown", (e) => {
-        if (e.code == "KeyW") engine.camera.center = engine.camera.center.add(new Vector2(0, -camera_speed));
-        if (e.code == "KeyA") engine.camera.center = engine.camera.center.add(new Vector2(-camera_speed, 0));
-        if (e.code == "KeyD") engine.camera.center = engine.camera.center.add(new Vector2(+camera_speed, 0));
-        if (e.code == "KeyS") engine.camera.center = engine.camera.center.add(new Vector2(0, +camera_speed));
-        engine.update();
-    });
+    addBtn.addEventListener("click", (_) => createPaletteItem(app, palette));
 
     engine.setEventCallback("grid_down", (button: number, position: Vector2) => {
         switch (button) {
@@ -541,7 +565,6 @@ interface App {
         engine.update();
     });
 
-    // INITIAL STATE
-    addBtn.click();
+    createPaletteItem(app, palette, "#", "#9912aa");
     engine.update();
 })();
