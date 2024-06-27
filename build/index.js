@@ -157,7 +157,9 @@ class Engine {
         this.renderCb = () => { };
         this.zoomLevel = 1;
         this.dragging = false;
+        this.drawing = false;
         this.old_mouse_position = Vector2.zero();
+        this.event_cbs = new Map();
         const canvas = document.querySelector("#canvas");
         if (canvas === null)
             throw new Error("Canvas #canvas not found.");
@@ -175,12 +177,22 @@ class Engine {
             if (e.button == 1) {
                 this.dragging = true;
             }
+            if (e.button == 0) {
+                this.drawing = true;
+            }
+            const gridPosition = this._clientToGrid(e.clientX, e.clientY);
+            this.callEventCallback("grid_down", [e.button, gridPosition]);
         });
         this.canvas.addEventListener("mouseup", (e) => {
             if (e.button == 1) {
                 this.dragging = false;
                 this.old_mouse_position = Vector2.zero();
             }
+            if (e.button == 0) {
+                this.drawing = false;
+            }
+            const gridPosition = this._clientToGrid(e.clientX, e.clientY);
+            this.callEventCallback("grid_up", [e.button, gridPosition]);
         });
         this.canvas.addEventListener("mousemove", (e) => {
             if (this.dragging) {
@@ -190,6 +202,10 @@ class Engine {
                 }
                 this.old_mouse_position = mouse_position;
                 this.update();
+            }
+            if (this.drawing) {
+                const gridPosition = this._clientToGrid(e.clientX, e.clientY);
+                this.callEventCallback("grid_down", [e.button, gridPosition]);
             }
         });
         this.canvas.addEventListener("wheel", (e) => {
@@ -209,24 +225,18 @@ class Engine {
         this.renderCb = cb;
     }
     setEventCallback(name, cb) {
-        switch (name) {
-            case "grid_clicked":
-                this.canvas.addEventListener("click", (e) => {
-                    e.preventDefault();
-                    cb(e.button, this._clientToGrid(e.clientX, e.clientY));
-                });
-                break;
-            case "grid_down":
-                this.canvas.addEventListener("mousedown", (e) => {
-                    // e.preventDefault();
-                    cb(e.button, this._clientToGrid(e.clientX, e.clientY));
-                });
-                break;
-            case "grid_up":
-                this.canvas.addEventListener("mouseup", (e) => {
-                    // e.preventDefault();
-                    cb(e.button, this._clientToGrid(e.clientX, e.clientY));
-                });
+        var _a;
+        if (!this.event_cbs.has(name)) {
+            this.event_cbs.set(name, []);
+        }
+        (_a = this.event_cbs.get(name)) === null || _a === void 0 ? void 0 : _a.push(cb);
+    }
+    callEventCallback(name, params) {
+        const cbs = this.event_cbs.get(name);
+        if (!cbs)
+            return;
+        for (let cb of cbs) {
+            cb(...params);
         }
     }
     resize(width, height) {
@@ -478,7 +488,6 @@ const engine = new Engine(width, height, tileSize);
         switch (button) {
             case 0: // left click
                 if (app.currentPaletteIdx != -1) {
-                    console.log(`click at ${position.toString()}`);
                     app.world.set(position, app.currentPaletteIdx);
                 }
                 break;
